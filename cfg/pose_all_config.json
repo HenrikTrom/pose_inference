@@ -1,0 +1,9 @@
+{
+    "onnxModelPath": "/home/docker/workspace/modules/pose-inference/models/rtmpose5_fixed.onnx",
+    "trtModelPath": "",
+    "engineFileDir": "/home/docker/workspace/modules/pose-inference/models/",
+    "precision": "FP16",
+    "confidence_threshold": 0.5,
+    "modelInputWidth": 192,
+    "calibrationBatchSize": 128
+}

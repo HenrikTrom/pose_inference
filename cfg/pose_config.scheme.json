@@ -1,0 +1,43 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "onnxModelPath": {
+        "type": "string"
+      },
+      "trtModelPath": {
+        "type": "string"
+      },
+      "engineFileDir": {
+        "type": "string"
+      },
+      "modelInputWidth": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "precision": {
+        "type": "string",
+        "enum": ["FP32", "FP16", "INT8"]
+      },
+      "confidence_threshold": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      },
+      "calibrationBatchSize": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "required": [
+      "onnxModelPath",
+      "trtModelPath",
+      "engineFileDir",
+      "modelInputWidth",
+      "precision",
+      "confidence_threshold",
+      "calibrationBatchSize"
+    ],
+    "additionalProperties": false
+  }
+  

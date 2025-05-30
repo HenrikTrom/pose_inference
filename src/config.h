@@ -4,7 +4,7 @@
 
 namespace pose_inference{
 
-constexpr std::string_view CONFIG_DIR = "/home/docker/workspace/modules/pose-inference/cfg";
+constexpr std::string_view CONFIG_DIR = "/home/docker/workspace/modules/pose_inference/cfg";
 constexpr uint16_t BATCH_SIZE = 5;
 
 } // namespace pose_inference

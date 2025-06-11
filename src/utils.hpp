@@ -5,9 +5,6 @@
 
 namespace pose_inference{
 
-constexpr size_t MAX_ITER = 1000; // benchmark samples
-constexpr size_t MAX_INFERENCE_SLEEP_MS = 10; // Fastest benchmark inference time in milliseconds
-
 void load_image_data(
     input_pose &PreProcessIn, std::array<cv::Mat, BATCH_SIZE> &cpuImgs, 
     std::array<std::string, BATCH_SIZE> fnames, std::string resources

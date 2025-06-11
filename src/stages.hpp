@@ -3,6 +3,7 @@
 #include "detection.hpp"
 #include "data.hpp"
 #include "config.h"
+#include <cassert>
 #include <future>
 
 namespace pose_inference {
@@ -47,7 +48,7 @@ public:
     std::vector<cv::Mat> cpuImgsTest;
 };
 // POSTPROCESS-TEMPLATE
-template<uint16_t NKPS, uint16_t FEAT_W, uint16_t FEAT_H>
+template<std::size_t NKPS, std::size_t FEAT_W, std::size_t FEAT_H>
 class PostProcessStage : public cpp_utils::StageBase<
     // input_postprocess, output_postprocess
     input_postprocess, std::array<std::array<std::array<float, 2>, NKPS>, BATCH_SIZE>
@@ -79,19 +80,15 @@ private:
         std::array<cv::Rect, BATCH_SIZE> &bboxes,
         std::array<std::array<std::array<float, 2>, NKPS>, BATCH_SIZE> &keypoints_out
     ){
+        const nvinfer1::Dims3 &inputDim = cfg.inputDims[0];
         for (size_t j = 0; j < BATCH_SIZE; j++){
+            assert(featureVectors.at(j).at(0).size() == NKPS*FEAT_W);
+            assert(featureVectors.at(j).at(1).size() == NKPS*FEAT_H);
             cv::Rect &bbox = bboxes.at(j);
     
-            float factor_w, factor_h;
-            
-            if (bbox.width > bbox.height){ // get longest side of bbox and compute scaling factors
-                factor_w = 1.f;
-                factor_h = this->cfg.inputDims[0].d[1] / (static_cast<float>(bbox.height) / static_cast<float>(bbox.width) * this->cfg.inputDims[0].d[2]);
-            }
-            else{
-                factor_w = this->cfg.inputDims[0].d[2] / (static_cast<float>(bbox.width) / static_cast<float>(bbox.height) * this->cfg.inputDims[0].d[1]);
-                factor_h = 1.f;
-            }        
+            float r = std::min(
+                (float)inputDim.d[2] / (float)(bbox.width * 1.0), 
+                (float)inputDim.d[1] / (float)(bbox.height * 1.0));  
             
             Eigen::Map<const Eigen::Matrix<float, NKPS, FEAT_W, Eigen::RowMajor>> matx(featureVectors.at(j).at(0).data());
             Eigen::Map<const Eigen::Matrix<float, NKPS, FEAT_H, Eigen::RowMajor>> maty(featureVectors.at(j).at(1).data());
@@ -110,8 +107,10 @@ private:
                 }
                 else
                 {
-                    keypoints_out.at(j).at(i)[0] = (static_cast<float>(coeff_x)/static_cast<float>(FEAT_W))*factor_w*bbox.width;
-                    keypoints_out.at(j).at(i)[1] = (static_cast<float>(coeff_y)/static_cast<float>(FEAT_H))*factor_h*bbox.height;
+                    keypoints_out.at(j).at(i)[0] = static_cast<float>(bbox.x)+(
+                        static_cast<float>(coeff_x)/static_cast<float>(FEAT_W)*static_cast<float>(inputDim.d[2]))/r;
+                    keypoints_out.at(j).at(i)[1] = static_cast<float>(bbox.y)+(
+                        static_cast<float>(coeff_y)/static_cast<float>(FEAT_H)*static_cast<float>(inputDim.d[1]))/r;
                 }
             }
         }
@@ -136,7 +135,7 @@ public:
 };
 
 // FULL POSE 
-template<uint16_t NKPS, uint16_t FEAT_W, uint16_t FEAT_H>
+template<std::size_t NKPS, std::size_t FEAT_W, std::size_t FEAT_H>
 class PoseModule
 {
 private:
@@ -206,11 +205,11 @@ public:
         }
         return false;
     };
-    uint16_t GetInFIFOSize(void)
+    std::size_t GetInFIFOSize(void)
     {
         return this->preprocess_stage->GetInFIFOSize();
     }
-    uint16_t GetOutFIFOSize(void)
+    std::size_t GetOutFIFOSize(void)
     {
         return this->postprocess_stage->GetOutFIFOSize();
     }

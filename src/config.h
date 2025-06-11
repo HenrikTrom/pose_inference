@@ -7,4 +7,8 @@ namespace pose_inference{
 constexpr std::string_view CONFIG_DIR = "/home/docker/workspace/build/dependencies/Docker-OpenCV-TensorRT-Dev/modules/pose_inference/cfg";
 constexpr uint16_t BATCH_SIZE = 5;
 
+constexpr size_t MAX_ITER = 10; // benchmark samples
+constexpr size_t MAX_INFERENCE_SLEEP_MS = 10; // Fastest benchmark inference time in milliseconds
+
+
 } // namespace pose_inference

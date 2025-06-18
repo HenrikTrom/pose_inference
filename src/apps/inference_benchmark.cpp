@@ -4,8 +4,8 @@ using namespace pose_inference;
 
 // model parameters:
 constexpr uint16_t nkpts = 133; 
-constexpr uint16_t feat_w = 384;
-constexpr uint16_t feat_h = 512;
+constexpr uint16_t feat_w = 576;
+constexpr uint16_t feat_h = 768;
 
 int main(int argc, char *argv[]) {
     // Load inference data

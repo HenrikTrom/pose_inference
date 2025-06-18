@@ -5,7 +5,7 @@ namespace pose_inference {
 // DETECTION STAGE
 NNStage::NNStage(config_pose &cfg, std::unique_ptr<Engine<float>> engine) : 
     cfg(cfg), engine(std::move(engine)){
-
+    this->type = "Pose NN";
     this->ThreadHandle.reset(new std::thread(&NNStage::ThreadFunction, this));
 
 }
@@ -45,16 +45,27 @@ void NNStage::Terminate(void)
 {
     this->ShouldClose = true;
     this->ThreadHandle->join();
-    spdlog::info(
-        "Average Pose NN Inference Time: {} milliseconds over {} samples", 
-        this->total_dt.count()/this->n_iterations, 
-        this->n_iterations
-    );
+    #ifdef USE_DEBUG_TIME_LOGGING
+        if (this->n_iterations != 0){
+            spdlog::info(
+                "Average {} Time: {} milliseconds over {} samples",
+                this->type, this->total_dt.count()/this->n_iterations, 
+                this->n_iterations
+            );
+        }
+        else{
+            spdlog::info(
+                "Average {} Time: 0 milliseconds over 0 samples",
+                this->type
+            );
+        }
+    #endif
 }
 
 
 // PREPROCESS STAGE
 PreProcessStage::PreProcessStage(const config_pose &cfg) : cfg(cfg){
+    this->type = "Pose PreProcess";
     this->ThreadHandle.reset(new std::thread(&PreProcessStage::ThreadFunction, this));
 }
 
@@ -84,11 +95,19 @@ void PreProcessStage::Terminate(void)
     this->ShouldClose = true;
     this->ThreadHandle->join();
     #ifdef USE_DEBUG_TIME_LOGGING
-    spdlog::info(
-        "Average Detection PreProcess Time: {} milliseconds over {} samples", 
-        this->total_dt.count()/this->n_iterations, 
-        this->n_iterations
-    );
+        if (this->n_iterations != 0){
+            spdlog::info(
+                "Average {} Time: {} milliseconds over {} samples",
+                this->type, this->total_dt.count()/this->n_iterations, 
+                this->n_iterations
+            );
+        }
+        else{
+            spdlog::info(
+                "Average {} Time: 0 milliseconds over 0 samples",
+                this->type
+            );
+        }
     #endif
 }
 

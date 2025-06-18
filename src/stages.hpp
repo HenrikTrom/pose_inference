@@ -120,17 +120,28 @@ private:
 
 public:
     PostProcessStage(config_pose &cfg) : cfg(cfg){
+        this->type = "Pose PostProcess";
         this->ThreadHandle.reset(new std::thread(&PostProcessStage::ThreadFunction, this));
     };
     ~PostProcessStage(){};
     void Terminate(void){
         this->ShouldClose = true;
         this->ThreadHandle->join();
-        spdlog::info(
-            "Average Pose PostProcess Time: {} milliseconds over {} samples", 
-            this->total_dt.count()/this->n_iterations, 
-            this->n_iterations
-        );
+        #ifdef USE_DEBUG_TIME_LOGGING
+        if (this->n_iterations != 0){
+            spdlog::info(
+                "Average {} Time: {} milliseconds over {} samples",
+                this->type, this->total_dt.count()/this->n_iterations, 
+                this->n_iterations
+            );
+        }
+        else{
+            spdlog::info(
+                "Average {} Time: 0 milliseconds over 0 samples",
+                this->type
+            );
+        }
+    #endif
     };
 };
 
@@ -188,7 +199,7 @@ public:
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
-        this->postprocess_stage.reset(new PostProcessStage<133, 384, 512>(cfg));
+        this->postprocess_stage.reset(new PostProcessStage<NKPS, FEAT_W, FEAT_H>(cfg));
         while (!postprocess_stage->IsReady())
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));

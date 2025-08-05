@@ -13,7 +13,7 @@ This module supports deployment in robotic systems for real-time tracking and pe
 ## 🧪 Test results
 
 * Intel(R) Xeon(R) W-2145 CPU @ 3.70GHz, Nvidia 2080 super, Ubuntu 20.04, CUDA 11.8, TensorRT 8.6.1.6, OpenCV 4.10.0 with RTMPose and BATCH_SIZE of 5 -> **Preprocess: ~1ms, NN inference ~4ms, Postprocess: ~1ms (1000 samples)**
-<!-- * Ubuntu 20.04, CUDA 12.3, TensorRT 10.6.1.6, OpenCV 4.10.0 -->
+* AMD Ryzen 9 7900X3D CPU @ 4.40GHz, Nvidia 4070 super, Ubuntu 20.04, CUDA 12.4, TensorRT 10.9.0.34, OpenCV 4.10.0 with Yolov8 and BATCH_SIZE of 5 -> **Preprocess: <1ms, NN inference ~2ms, Postprocess: ~<1ms (1000 samples)**
 
 ## 📑 Citation
 

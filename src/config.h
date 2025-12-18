@@ -4,7 +4,7 @@
 
 namespace pose_inference{
 
-constexpr std::string_view CONFIG_DIR = "/home/docker/workspace/modules/pose_inference/cfg";
+constexpr std::string_view CONFIG_DIR = "/home/docker/workspace/build/dependencies/Docker-OpenCV-TensorRT-Dev/modules/pose_inference/cfg";
 constexpr uint16_t BATCH_SIZE = 5;
 
 constexpr size_t MAX_ITER = 1000; // benchmark samples

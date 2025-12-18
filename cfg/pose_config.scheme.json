@@ -27,6 +27,22 @@
       "calibrationBatchSize": {
         "type": "integer",
         "minimum": 1
+      },
+      "kf_threshold": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "ma_threshold": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "kf_r": {
+        "type": "number",
+        "minimum": 0
+      },
+      "kf_q": {
+        "type": "number",
+        "minimum": 0
       }
     },
     "required": [
@@ -36,7 +52,11 @@
       "modelInputWidth",
       "precision",
       "confidence_threshold",
-      "calibrationBatchSize"
+      "calibrationBatchSize",
+      "kf_threshold",
+      "ma_threshold",
+      "kf_r",
+      "kf_q"
     ],
     "additionalProperties": false
   }

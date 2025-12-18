@@ -19,6 +19,10 @@ bool load_config(const std::string &cfg_path, config_pose &cfg){
     cfg.precision = doc["precision"].GetString();
     cfg.confidence_threshold = doc["confidence_threshold"].GetFloat();
     cfg.calibrationBatchSize = (uint16_t) doc["calibrationBatchSize"].GetUint();
+    cfg.kf_threshold = (uint16_t) doc["kf_threshold"].GetUint();
+    cfg.ma_threshold = (uint16_t) doc["ma_threshold"].GetUint();
+    cfg.kf_r = doc["kf_r"].GetFloat();
+    cfg.kf_q = doc["kf_q"].GetFloat();
 
     return true;
 }

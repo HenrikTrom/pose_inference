@@ -22,6 +22,10 @@ struct config_pose{
     std::vector<nvinfer1::Dims> outputDims;
     float confidence_threshold;
     uint16_t calibrationBatchSize = 0;
+    uint16_t kf_threshold = 0;
+    uint16_t ma_threshold = 0;
+    float kf_q = 0;
+    float kf_r = 0;
 };
 
 Precision stringToPrecision(const std::string &precisionStr);

@@ -27,7 +27,6 @@ int main(int argc, char *argv[]) {
         cfg_pose,
         engine
     );
-
     PoseModule<nkpts, feat_w, feat_h> pose_module(cfg_pose, std::move(engine));
     
     while (!pose_module.IsReady())

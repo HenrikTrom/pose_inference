@@ -79,7 +79,7 @@ private:
         std::vector<std::vector<std::vector<float>>> &featureVectors,
         std::array<cv::Rect, BATCH_SIZE> &bboxes,
         std::array<std::array<std::array<float, 2>, NKPS>, BATCH_SIZE> &keypoints_out
-    ){
+    ) {
         const nvinfer1::Dims3 &inputDim = cfg.inputDims[0];
         for (size_t j = 0; j < BATCH_SIZE; j++){
             assert(featureVectors.at(j).at(0).size() == NKPS*FEAT_W);
@@ -145,6 +145,194 @@ public:
     };
 };
 
+// PIXEL FILTER
+template<uint16_t NKPS>
+class PixelFilterStage : public cpp_utils::StageBase<
+    std::array<std::array<std::array<float, 2>, NKPS>, BATCH_SIZE>, 
+    std::array<std::array<std::array<float, 2>, NKPS>, BATCH_SIZE>
+>
+{
+public:
+    PixelFilterStage(
+        const uint16_t _kf_thres, const uint16_t _ma_thres, const float _r, const float _q
+    ) : kf_threshold(_kf_thres), ma_threshold(_ma_thres), r(_r), q(_q) {
+        this->type = "Pose PixelFilter";
+        for (uint16_t i = 0; i<BATCH_SIZE; i++) {
+            for (uint16_t kpt = 0; kpt<NKPS; kpt++) {
+                filters.at(i).at(kpt).reset(
+                    new cv::KalmanFilter(
+                        this->stateDim, this->measDim, this->ctrlDim, CV_32F
+                    )
+                );
+                lost_track.at(i).at(kpt) = this->kf_threshold;
+                // --- State vector: [u, v, du, dv]^T ---
+                // Post = "posterior" (after update); we'll initialize it
+                filters.at(i).at(kpt)->statePost = (cv::Mat_<float>(stateDim, 1) << 0, 0, 0, 0);
+                // --- Transition matrix F (constant velocity model) ---
+                // x_k+1 = F * x_k
+                // [ 1 0 dt 0 ]
+                // [ 0 1 0  dt ]
+                // [ 0 0 1  0  ]
+                // [ 0 0 0  1  ]
+                filters.at(i).at(kpt)->transitionMatrix = (cv::Mat_<float>(stateDim, stateDim) <<
+                    1, 0, this->dt, 0,
+                    0, 1, 0, this->dt,
+                    0, 0, 1, 0,
+                    0, 0, 0, 1);
+                // --- Measurement matrix H ---
+                // Measurement z = [u, v]
+                // z = H * x
+                // [ 1 0 0 0 ]
+                // [ 0 1 0 0 ]
+                filters.at(i).at(kpt)->measurementMatrix = (cv::Mat_<float>(measDim, stateDim) <<
+                    1, 0, 0, 0,
+                    0, 1, 0, 0);
+                filters.at(i).at(kpt)->processNoiseCov = (cv::Mat_<float>(stateDim, stateDim) <<
+                    this->q, 0, 0, 0,
+                    0, this->q, 0, 0,
+                    0, 0, this->q, 0,
+                    0, 0, 0, this->q);
+                filters.at(i).at(kpt)->measurementNoiseCov = (cv::Mat_<float>(measDim, measDim) <<
+                    this->r, 0,
+                    0, this->r);
+                // Init error covariance with large values as we are unsure initially
+                filters.at(i).at(kpt)->errorCovPost = cv::Mat::eye(stateDim, stateDim, CV_32F) * 1;
+            };
+        }
+        this->ThreadHandle.reset(new std::thread(&PixelFilterStage::ThreadFunction, this));
+        this->IsReady_flag=true;
+    };
+    ~PixelFilterStage(){};
+    void Terminate(void) {
+        this->ShouldClose = true;
+        this->ThreadHandle->join();
+        #ifdef USE_DEBUG_TIME_LOGGING
+        if (this->n_iterations != 0){
+            spdlog::info(
+                "Average {} Time: {} milliseconds over {} samples",
+                this->type, this->total_dt.count()/this->n_iterations, 
+                this->n_iterations
+            );
+        }
+        else{
+            spdlog::info(
+                "Average {} Time: 0 milliseconds over 0 samples",
+                this->type
+            );
+        }
+        #endif
+    };
+private:
+    bool ProcessFunction(
+        std::array<std::array<std::array<float, 2>, NKPS>, BATCH_SIZE> &keypoints, 
+        std::array<std::array<std::array<float, 2>, NKPS>, BATCH_SIZE> &estimations
+        ) {
+            #ifdef USE_DEBUG_TIME_LOGGING
+                this->t1 = std::chrono::steady_clock::now();
+            #endif
+            this->update(keypoints, estimations);
+        
+            #if defined(USE_DEBUG_TIME_LOGGING)
+            this->t2 = std::chrono::steady_clock::now();
+                this->duration = std::chrono::duration_cast<std::chrono::milliseconds>(this->t2 - this->t1);
+                this->n_iterations++;
+                this->total_dt += this->duration;
+            #endif
+            return true;
+        };
+
+    void update(
+        std::array<std::array<std::array<float, 2>, NKPS>, BATCH_SIZE> &keypoints, 
+        std::array<std::array<std::array<float, 2>, NKPS>, BATCH_SIZE> &estimations
+    ) {
+        for (uint16_t i = 0; i<BATCH_SIZE; i++) {
+            for (uint16_t kpt = 0; kpt<NKPS; kpt++) {
+                float &u = keypoints.at(i).at(kpt).at(0);
+                float &v = keypoints.at(i).at(kpt).at(1);
+                if (u == 0 || v == 0) {
+                    if (this->lost_track.at(i).at(kpt) < this->kf_threshold){
+                        this->lost_track.at(i).at(kpt) += 1;
+                        cv::Mat prediction = filters.at(i).at(kpt)->predict();
+                        // ma update
+                        cv::Point2f meas{prediction.at<float>(0), prediction.at<float>(1)};
+                        ma.at(i).at(kpt).push_back(meas);
+                        if (static_cast<uint16_t>(ma.at(i).at(kpt).size())>this->ma_threshold) {
+                            ma.at(i).at(kpt).erase(ma.at(i).at(kpt).begin()); //erease first element
+                        }
+                        this->mean_u = 0;
+                        this->mean_v = 0;
+                        for (const cv::Point2f &p : ma.at(i).at(kpt)) {
+                            this->mean_u += p.x;
+                            this->mean_v += p.y;
+                        }
+                        estimations.at(i).at(kpt).at(0) = mean_u/(static_cast<float>(ma.at(i).at(kpt).size()));
+                        estimations.at(i).at(kpt).at(1) = mean_v/(static_cast<float>(ma.at(i).at(kpt).size()));
+                    }
+                    else {
+                        estimations.at(i).at(kpt).at(0) = 0;
+                        estimations.at(i).at(kpt).at(1) = 0;
+                        if (this->lost_track.at(i).at(kpt) == this->kf_threshold) {
+                            filters.at(i).at(kpt)->statePost = (cv::Mat_<float>(stateDim, 1) << 0, 0, 0, 0);
+                        }
+                        // ma reset
+                        ma.at(i).at(kpt).clear();
+                    }
+                }
+                else {
+                    if (this->lost_track.at(i).at(kpt) == this->kf_threshold) {
+                        this->lost_track.at(i).at(kpt) = 0;
+                        filters.at(i).at(kpt)->statePost = (cv::Mat_<float>(stateDim, 1) << u, v, 0, 0);
+                        cv::Point2f meas{u, v};
+                        ma.at(i).at(kpt).push_back(meas);
+                    }
+                    else {
+                        cv::Mat prediction = filters.at(i).at(kpt)->predict();
+                        this->measurement.at<float>(0) = u;
+                        this->measurement.at<float>(1) = v;
+                        cv::Mat estimated = filters.at(i).at(kpt)->correct(this->measurement);
+
+                        // ma update
+                        cv::Point2f meas{estimated.at<float>(0), estimated.at<float>(1)};
+                        ma.at(i).at(kpt).push_back(meas);
+                        this->mean_u = 0;
+                        this->mean_v = 0;
+                        if (static_cast<uint16_t>(ma.at(i).at(kpt).size())>this->ma_threshold) {
+                            ma.at(i).at(kpt).erase(ma.at(i).at(kpt).begin()); //erease first element
+                        }
+                        for (const cv::Point2f &p : ma.at(i).at(kpt)) {
+                            this->mean_u += p.x;
+                            this->mean_v += p.y;
+                        }
+                        estimations.at(i).at(kpt).at(0) = mean_u/(static_cast<float>(ma.at(i).at(kpt).size()));
+                        estimations.at(i).at(kpt).at(1) = mean_v/(static_cast<float>(ma.at(i).at(kpt).size()));
+                    }
+                }
+            }
+        }
+    };
+
+    std::array<std::array<std::unique_ptr<cv::KalmanFilter>, NKPS>, BATCH_SIZE> filters;
+    std::array<std::array<uint16_t, NKPS>, BATCH_SIZE> lost_track;
+    std::array<std::array<std::vector<cv::Point2f>, NKPS>, BATCH_SIZE> ma;
+    // --- Parameters ---
+    const int stateDim = 4;   // [u, v, du, dv]
+    const int measDim  = 2;   // [u, v]
+    const int ctrlDim  = 0;   // no control input
+
+    const float dt = 1.0f;    // time step in frames (called every frame)
+    int frame = 0;
+
+    const float r = 1e-1f;  // measurement noise scalar
+    const float q = 1e-2f;  // process noise scalar
+    const uint16_t kf_threshold = 4;
+    const uint16_t ma_threshold = 3;
+    float mean_u = 0;
+    float mean_v = 0;
+    cv::Mat measurement = cv::Mat::zeros(this->measDim, 1, CV_32F); // incoming measurement vector [u, v]^T
+
+};
+
+
 // FULL POSE 
 template<std::size_t NKPS, std::size_t FEAT_W, std::size_t FEAT_H>
 class PoseModule
@@ -154,6 +342,7 @@ private:
     std::unique_ptr<PreProcessStage> preprocess_stage;
     std::unique_ptr<NNStage> nn_stage;
     std::unique_ptr<PostProcessStage<NKPS, FEAT_W, FEAT_H>> postprocess_stage;
+    std::unique_ptr<PixelFilterStage<NKPS>> pixelfilter_stage;
     // Threads
     void ThreadPreprocessNN(){
         while (!this->ShouldClose) {
@@ -168,7 +357,7 @@ private:
         while (!this->ShouldClose) {
             input_postprocess PostIn;
             if (this->nn_stage->Get(PostIn.features)){
-                std::lock_guard<std::mutex> lck(this->mtx);
+                std::lock_guard<std::mutex> lck(this->mtx_1);
                 {
                     PostIn.bboxes = this->queue_bboxes.front();
                 }
@@ -178,12 +367,23 @@ private:
             std::this_thread::sleep_for(std::chrono::microseconds(10));
         }
     };
+    void ThreadPostProcessPixelFilter(){
+        while (!this->ShouldClose) {
+            std::array<std::array<std::array<float, 2>, NKPS>, BATCH_SIZE> keypoints;
+            if (this->postprocess_stage->Get(keypoints)){
+                std::lock_guard<std::mutex> lck(this->mtx_2);
+                this->pixelfilter_stage->Post(keypoints);
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(10));
+        }
+    };
 
     std::queue<std::array<cv::Rect, BATCH_SIZE>> queue_bboxes;
-    std::mutex mtx;
+    std::mutex mtx_0, mtx_1, mtx_2;
 
     std::unique_ptr<std::thread> ThreadHandlePreprocessNN;
     std::unique_ptr<std::thread> ThreadHandleNNProstprocess;
+    std::unique_ptr<std::thread> ThreadHandleProstprocessPixelFilter;
 
     bool ShouldClose = false;
     bool IsReady_flag = false;
@@ -204,29 +404,33 @@ public:
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
+        this->pixelfilter_stage.reset(new PixelFilterStage<NKPS>(cfg.kf_threshold, cfg.ma_threshold, cfg.kf_r, cfg.kf_q));
+        // this->pixelfilter_stage.reset(new PixelFilterStage<NKPS>());
+        while (!pixelfilter_stage->IsReady())
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
         this->ThreadHandlePreprocessNN.reset(new std::thread(&PoseModule::ThreadPreprocessNN, this)); 
         this->ThreadHandleNNProstprocess.reset(new std::thread(&PoseModule::ThreadNNPostProcess, this)); 
+        this->ThreadHandleProstprocessPixelFilter.reset(new std::thread(&PoseModule::ThreadPostProcessPixelFilter, this)); 
         this->IsReady_flag=true;
     };
     ~PoseModule(){};
     bool Get(std::array<std::array<std::array<float, 2>, NKPS>, BATCH_SIZE> &DataOut){
-        if (this->postprocess_stage->GetOutFIFOSize()!=0)
-        {
-            return this->postprocess_stage->Get(DataOut);;
+        if (this->pixelfilter_stage->GetOutFIFOSize() != 0) {
+            return this->pixelfilter_stage->Get(DataOut);;
         }
         return false;
     };
-    std::size_t GetInFIFOSize(void)
-    {
+    std::size_t GetInFIFOSize(void) {
         return this->preprocess_stage->GetInFIFOSize();
     }
-    std::size_t GetOutFIFOSize(void)
-    {
-        return this->postprocess_stage->GetOutFIFOSize();
+    std::size_t GetOutFIFOSize(void) {
+        return this->pixelfilter_stage->GetOutFIFOSize();
     }
     void InPost(input_pose &PreProcessIn){
         this->preprocess_stage->Post(PreProcessIn.images);
-        std::lock_guard<std::mutex> lck(this->mtx);
+        std::lock_guard<std::mutex> lck(this->mtx_0);
         {
             this->queue_bboxes.push(PreProcessIn.bboxes);
         }
@@ -239,11 +443,15 @@ public:
         this->ShouldClose=true;
         this->ThreadHandlePreprocessNN->join();
         this->ThreadHandleNNProstprocess->join();
+        this->ThreadHandleProstprocessPixelFilter->join();
 
         this->preprocess_stage->Terminate();
         this->nn_stage->Terminate();
         this->postprocess_stage->Terminate();
+        this->pixelfilter_stage->Terminate();
     };
 };
 
 } // namespace pose_inference
+
+// TODO: remove muteces?

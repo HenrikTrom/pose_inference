@@ -1,4 +1,4 @@
-#include "detection.hpp"
+#include "pose_inference/detection.hpp"
 #include <chrono>
 
 namespace pose_inference {

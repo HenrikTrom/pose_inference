@@ -1,7 +1,7 @@
 #pragma once
 #include "cpp_utils/jsontools.h"
 #include "tensorrt-cpp-api/engine.h"
-#include "config.h"
+#include "pose_inference/config.h"
 
 namespace pose_inference {
 

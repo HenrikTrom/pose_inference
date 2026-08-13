@@ -1,9 +1,19 @@
-#include "config_parser.hpp"
+#include "pose_inference/config_parser.hpp"
+#include <filesystem>
 
 namespace pose_inference {
 
 bool load_config(const std::string &cfg_path, config_pose &cfg){
-    std::string schemepath = std::string(CONFIG_DIR)+"/pose_config.scheme.json"; // compare with scheme
+    const std::filesystem::path cfg_file_path(cfg_path);
+    std::filesystem::path schema_file_path = cfg_file_path.parent_path();
+    if (schema_file_path.empty()) {
+        schema_file_path = std::filesystem::path(std::string(CONFIG_DIR));
+    }
+    schema_file_path /= "pose_config.scheme.json";
+    if (!std::filesystem::exists(schema_file_path)) {
+        schema_file_path = std::filesystem::path(std::string(CONFIG_DIR)) / "pose_config.scheme.json";
+    }
+    const std::string schemepath = schema_file_path.string();
     rapidjson::Document doc;
     if(!cpp_utils::load_json_with_schema(cfg_path, schemepath, DOC_BUFFER, doc)){
         const std::string msg = "Unable to load pipeline config: " + cfg_path;

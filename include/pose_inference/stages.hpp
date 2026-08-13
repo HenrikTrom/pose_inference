@@ -1,8 +1,8 @@
 #pragma once
 #include "cpp_utils/StageBase.h"
-#include "detection.hpp"
-#include "data.hpp"
-#include "config.h"
+#include "pose_inference/detection.hpp"
+#include "pose_inference/data.hpp"
+#include "pose_inference/config.h"
 #include <cassert>
 #include <future>
 

@@ -1,3 +1,35 @@
 @PACKAGE_INIT@
 
+include(CMakeFindDependencyMacro)
+
+find_dependency(Threads)
+if(POLICY CMP0146)
+  cmake_policy(PUSH)
+  cmake_policy(SET CMP0146 OLD)
+endif()
+if(NOT "@OpenCV_CUDA_VERSION@" STREQUAL "")
+  find_package(CUDA @OpenCV_CUDA_VERSION@ EXACT REQUIRED)
+endif()
+find_dependency(OpenCV COMPONENTS
+  core dnn imgproc imgcodecs videoio cudaarithm cudaimgproc cudawarping)
+if(POLICY CMP0146)
+  cmake_policy(POP)
+endif()
+find_dependency(Eigen3 CONFIG)
+find_dependency(cpp_utils CONFIG)
+
+# The installed TensorRT fork exports fmt::fmt and Threads::Threads in its
+# interface but does not currently resolve them in its own package config.
+find_dependency(fmt CONFIG)
+find_dependency(tensorrt-cpp-api CONFIG)
+
 include("${CMAKE_CURRENT_LIST_DIR}/pose_inferenceTargets.cmake")
+
+# Compatibility with downstream projects that linked the historical plain name.
+if(NOT TARGET pose_inference)
+  add_library(pose_inference INTERFACE IMPORTED)
+  set_property(TARGET pose_inference PROPERTY INTERFACE_LINK_LIBRARIES
+    pose_inference::pose_inference)
+endif()
+
+check_required_components(pose_inference)

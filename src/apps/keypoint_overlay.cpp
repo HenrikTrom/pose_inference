@@ -1,25 +1,38 @@
 #include "cpp_utils/opencvtools.h"
 #include "cpp_utils/jsontools.h"
-#include "../config.h"
-#include "../utils.hpp"
-#include "../stages.hpp"
+#include "pose_inference/config.h"
+#include "pose_inference/utils.hpp"
+#include <tensorrt-cpp-api/util/Util.h>
 #include <sstream>
-#include <opencv2/video/tracking.hpp>
 
 using namespace pose_inference;
 
 int main(int argc, char *argv[]) {
 
-    if (argc != 2)
-    {
-        std::string error_msg = "Expected missing argument for videos";
-        spdlog::error(error_msg);
+    if (argc != 3 && argc != 4) {
+        spdlog::error("Usage: {} <input_dir> <output_dir> [config_path]", argv[0]);
         return 1;
     }
-    std::string folder = std::string(argv[1]);
-
-    std::string resources = std::string(CONFIG_DIR)+"/../"+folder+"/";
-    std::string savepath = std::string(CONFIG_DIR)+"/../outputs/";
+    const std::filesystem::path input_dir(argv[1]);
+    const std::filesystem::path output_dir(argv[2]);
+    if (argc == 4) {
+        spdlog::info("Config path argument ignored by keypoint_overlay: {}", argv[3]);
+    }
+    if (!std::filesystem::is_directory(input_dir)) {
+        spdlog::error("Input directory does not exist: {}", input_dir.string());
+        return 1;
+    }
+    std::error_code error;
+    std::filesystem::create_directories(output_dir, error);
+    if (error) {
+        spdlog::error("Could not create output directory {}: {}", output_dir.string(), error.message());
+        return 1;
+    }
+    const std::string resources = input_dir.string() + "/";
+    const std::string output_resources = output_dir.string() + "/";
+    if (!Util::ensureCudaDeviceAvailable()) {
+        return 1;
+    }
 
     std::array<std::string, BATCH_SIZE> fnames = cpp_utils::get_filenames<BATCH_SIZE>(
         resources, ".mp4"
@@ -32,7 +45,7 @@ int main(int argc, char *argv[]) {
     std::array<cv::VideoWriter, BATCH_SIZE+1> writers;
     std::vector<std::string> save_names;
     for (uint16_t i = 0; i < BATCH_SIZE; i++){
-        std::string sname = savepath+fnames.at(i)+"_overlay.mp4";
+        std::string sname = output_resources+fnames.at(i)+"_overlay.mp4";
         save_names.push_back(sname);
         writers.at(i) = cv::VideoWriter(
             sname,
@@ -41,7 +54,7 @@ int main(int argc, char *argv[]) {
             cv::Size(WIDTH, HEIGHT)
         );
     }
-    std::string sname = savepath+"4cams.mp4";
+    std::string sname = output_resources+"4cams.mp4";
     save_names.push_back(sname);
     writers.at(BATCH_SIZE) = cv::VideoWriter(
         sname,
@@ -52,14 +65,11 @@ int main(int argc, char *argv[]) {
 
     std::array<std::vector<float>, BATCH_SIZE> batch_kptsx, batch_kptsy;
     const std::size_t n_frames = video_iter.get_framecount();
-    cpp_utils::ProgressBar progressBar(n_frames);
-    progressBar.update(0);
     for (std::size_t m = 0; m < n_frames; m++){
         std::array<cv::Mat, BATCH_SIZE> images;
         video_iter.get_next(images);
         pose_iter.get(batch_kptsx, batch_kptsy);
         cv::Mat result_img(HEIGHT, WIDTH, CV_8UC3);
-        // reformat input, update filter
         for (uint16_t i = 0; i < BATCH_SIZE; i++){
             for (std::size_t k = 0; k<batch_kptsx.at(i).size(); k++){
                 if (batch_kptsx.at(i).at(k) == 0 || batch_kptsy.at(i).at(k) == 0){
@@ -107,7 +117,6 @@ int main(int argc, char *argv[]) {
             }
         }
         writers.at(BATCH_SIZE).write(result_img);
-        progressBar.update(m);
     }
 
     for (uint16_t i = 0; i <= BATCH_SIZE; i++){

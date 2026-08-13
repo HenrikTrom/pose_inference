@@ -1,6 +1,6 @@
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
-    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
     message(STATUS "ccache: found")
 else()
     message(STATUS "ccache: not found")

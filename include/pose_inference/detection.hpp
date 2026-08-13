@@ -1,5 +1,5 @@
 #pragma once
-#include "config_parser.hpp"
+#include "pose_inference/config_parser.hpp"
 #include <chrono>
 #include <opencv2/opencv.hpp>
 #include <tuple>

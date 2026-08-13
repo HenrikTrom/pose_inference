@@ -1,4 +1,4 @@
-#include "stages.hpp"
+#include "pose_inference/stages.hpp"
 
 namespace pose_inference {
 

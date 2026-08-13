@@ -1,5 +1,5 @@
 #pragma once
-#include "stages.hpp"
+#include "pose_inference/stages.hpp"
 #include "cpp_utils/clitools.h"
 #include "cpp_utils/opencvtools.h"
 
@@ -16,13 +16,13 @@ void feeder_thread_benchmark(PoseModule<NKPS, FEAT_W, FEAT_H> *stage, input_pose
     progressBar.update(0);
     for (std::size_t i = 1; i <= MAX_ITER; i++)
     {
-        if (stage->GetInFIFOSize() < cpp_utils::MAXINFIFOSIZE)
+        while (stage->GetInFIFOSize() >= cpp_utils::MAXINFIFOSIZE)
         {
-            input_pose tmp = PreProcessIn;
-            stage->InPost(tmp);
-            progressBar.update(i);
+            std::this_thread::sleep_for(std::chrono::microseconds(MAX_INFERENCE_SLEEP_MS));
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(MAX_INFERENCE_SLEEP_MS));
+        input_pose tmp = PreProcessIn;
+        stage->InPost(tmp);
+        progressBar.update(i);
     }
     progressBar.finish();
 };
@@ -37,7 +37,10 @@ void feeder_thread_video(
     progressBar.update(0);
     for (std::size_t i = 1; i <= n_frames; i++)
     {
-        if (stage->GetInFIFOSize() < cpp_utils::MAXINFIFOSIZE)
+        while (stage->GetInFIFOSize() >= cpp_utils::MAXINFIFOSIZE)
+        {
+            std::this_thread::sleep_for(std::chrono::microseconds(MAX_INFERENCE_SLEEP_MS));
+        }
         {
             input_pose PreProcessIn;
             std::array<cv::Mat, BATCH_SIZE> tmp;

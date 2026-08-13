@@ -4,7 +4,7 @@
 #include<time.h>
 #include <utility>
 #include <opencv2/core/cuda.hpp>
-#include "config.h"
+#include "pose_inference/config.h"
 
 namespace pose_inference {
 

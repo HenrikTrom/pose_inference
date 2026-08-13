@@ -2,6 +2,10 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <string_view>
+
 namespace pose_inference{
 
 constexpr std::string_view CONFIG_DIR = "@CONFIG_DIR@";
